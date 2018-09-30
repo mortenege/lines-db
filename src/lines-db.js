@@ -226,6 +226,10 @@ class LinesDb {
    * @return {Boolean}    Result of compare
    */
   static operators (op, x, y) {
+    if (typeof op !== 'string') throw new Error('Operator type mismatch')
+
+    op = op.toLowerCase()
+
     switch (op) {
       case '=':
         return x == y
@@ -239,6 +243,13 @@ class LinesDb {
         return x >= y
       case '<=':
         return x <= y
+      case 'in':
+        if (!Array.isArray(y)) throw new Error('Type mismatch for IN operator')
+        return y.indexOf(x) >= 0
+      case 'match':
+        if (typeof x !== 'string') throw new Error('Expected string, got ' + typeof x)
+        if (typeof y !== 'string') throw new Error('Expected string, got ' + typeof y)
+        return y.match(x) !== null
       default:
         throw new Error('Unknown operator \'' + op + '\'')
     }
