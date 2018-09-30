@@ -1,4 +1,75 @@
 /**
+ * Global facade for dependency injection
+ */
+class LinesDbFacade {
+
+  static set db (db) {
+    this.constructor._db = db
+  }
+
+  static get db () {
+    return this.constructor._db
+  }
+
+  static find (model, id) {
+    return this.constructor._db.find(model, id)
+  }
+
+  static where (model, key, value, operator = '=') {
+    return this.constructor._db.where(model, key, value, operator) 
+  }
+}
+
+/**
+ * Collection
+ */
+class LinesDbCollection {
+
+  /**
+   * Create Collection from Array
+   * @param  {Array} arr    Array of Models
+   */
+  constructor (arr) {
+    this._arr = arr.slice()
+  }
+
+  /**
+   * Find within collection - model is already known
+   * @param  {Integer} id   Id of Modal to find
+   * @return {LinesDbModel}    Found model or null
+   */
+  find (id) {
+    for (let i in this._arr) {
+      let m = this._arr[i]
+      if (m.id == id) {
+        return m
+      }
+    }
+    return null
+  } 
+
+  /**
+   * Filter within the Collection - Model is already known
+   * @param  {String} key      Which Model attribute to search
+   * @param  {Mixed}  value    Value to compare with
+   * @param  {String} operator An operator for the operation
+   * @return {LinesDbCollection}          A filtered collection
+   */
+  where (key, value, operator = '=') {
+    let arr = []
+    for (let i in this._arr) {
+      let m = this._arr[i]
+      // if (model !== m.modelName) continue
+      if (LinesDb.operators(operator, m[key], value)) {
+        arr.push(m)
+      }
+    }
+    this._arr = arr.slice()
+    return this
+  }
+}
+
+/**
  * Base Class for Models
  */
 class LinesDbModel {
@@ -14,7 +85,7 @@ class LinesDbModel {
     this._db = db
     this.id = id
     this.model = model,
-    this.data = data
+    this.data = Object.assign({}, data)
   }
 
   /**
@@ -57,6 +128,10 @@ class LinesDbModel {
     return this.constructor.name.slice(0, -5)
   }
 
+  static get modelName () {
+    return this.name.slice(0, -5) 
+  }
+
   /**
    * Get the Schema referenced in the database
    * @return {Object} Schema
@@ -91,6 +166,26 @@ class LinesDbModel {
   }
 
   /**
+   * Find Model of this type by Id
+   * @param  {Integer} id   Model Id
+   * @return {LinesDbModel}    Found Model or null
+   */
+  static find (id) {
+    return LinesDbFacade.find(this.modelName, id)
+  }
+
+  /**
+   * Find Models of this type 
+   * @param  {String} key      Model Attribute
+   * @param  {Mixed}  value    Attribute value to compare
+   * @param  {String} operator operator for operation
+   * @return {LinesDbCollection}          Array of found models
+   */
+  static where (key, value, operator = '=') {
+    return LinesDbFacade.where(this.modelName, key, value, operator)
+  }
+
+  /**
    * Override toString method
    * @return {String}
    */
@@ -112,12 +207,40 @@ class LinesDb {
    * @param  {string|array} database Array of properly formatted data
    */
   constructor (database) {
-    console.log('LinesDb:constructor', typeof database)
     this._models = {}
     this._data = {}
 
     if (Array.isArray(database)) {
       this.createDatabaseFromArray(database)
+    }
+
+    // Inject global dependency
+    LinesDbFacade.db = this
+  }
+
+  /**
+   * Operator string to function 'transpiler'
+   * @param  {String} op  Operator
+   * @param  {Mixed} x    Operator compare value 1
+   * @param  {Mixed} y    Operator compare value 2
+   * @return {Boolean}    Result of compare
+   */
+  static operators (op, x, y) {
+    switch (op) {
+      case '=':
+        return x == y
+      case '!=':
+        return x != y
+      case '>':
+        return x > y
+      case '<':
+        return x < y
+      case '>=':
+        return x >= y
+      case '<=':
+        return x <= y
+      default:
+        throw new Error('Unknown operator \'' + op + '\'')
     }
   }
 
@@ -154,7 +277,22 @@ class LinesDb {
     if (!this._models.hasOwnProperty(model)) {
       return new LinesDbModel(this, model, id, this._data[model][id])
     }
+
     return new this._models[model].class(this, model, id, this._data[model][id])
+  }
+
+  where (model, key, value, operator = '=') {
+    if (!this._data.hasOwnProperty(model)) return null
+    let arr = []
+    for (let id in this._data[model]) {
+      let m = this._data[model][id]
+      let v = m[key]
+      if (this.constructor.operators(operator, v, value)) {
+        arr.push(this.find(model, id))
+        //arr.push(Object.assign({id: id, model: model}, m))
+      }
+    }
+    return new LinesDbCollection(arr)
   }
 
   /**
@@ -192,58 +330,9 @@ class LinesDb {
   }
 }
 
-/***************************************************
- *
- * TEST CODE
- *
- ***************************************************/
-
-/**
- * Model: Project
- */
-class ProjectModel extends LinesDbModel {
-  static schema () {
-    return {
-      title: 'string',
-    }
-  }
+module.exports = {
+  LinesDb,
+  LinesDbModel,
+  LinesDbCollection,
+  LinesDbFacade
 }
-
-/**
- * Model:: TimeEvent
- */
-class TimeEventModel extends LinesDbModel {
-  static schema () {
-    return {
-      projectId: {type: 'fk', model: 'Project'},
-      description: 'string',
-    }
-  }
-}
-
-/**
- * Mock Database
- * @type {Array}
- */
-let obj = [
-  {model: 'Project', id: 1, title: 'Project Aha'},
-  {model: 'Project', id: 2, title: 'Project bac'},
-  {model: 'Project', id: 3, title: 'Project omm'},
-  {model: 'Project', id: 4, title: 'Project sup'},
-  {model: 'TimeEvent', id: 1, projectId: 1, description: 'Working a'},
-  {model: 'TimeEvent', id: 2, projectId: 1, description: 'Working b'},
-  {model: 'TimeEvent', id: 3, projectId: 2, description: 'Working c'},
-  {model: 'TimeEvent', id: 4, projectId: 2, description: 'Working d'},
-  {model: 'TimeEvent', id: 5, projectId: 2, description: 'Working e'},
-  {model: 'TimeEvent', id: 6, projectId: 3, description: 'Working f'},
-  {model: 'TimeEvent', id: 7, projectId: 3, description: 'Working g'},
-  {model: 'TimeEvent', id: 8, projectId: 4, description: 'Working h'}
-]
-
-// Initialize the database
-let db = new LinesDb(obj)
-// Associate models with the database
-db.addModel(ProjectModel)
-db.addModel(TimeEventModel)
-// Perform a simple query
-console.log(db.find('TimeEvent', 3).with('project'))
