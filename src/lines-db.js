@@ -16,7 +16,19 @@ class LinesDbFacade {
   }
 
   static where (model, key, value, operator = '=') {
-    return this.constructor._db.where(model, key, value, operator) 
+    return this.constructor._db.where(model, key, value, operator)
+  }
+
+  static insert (model, data) {
+    return this.constructor._db.insert(model, data)
+  }
+
+  static update (model, id, data) {
+    return this.constructor._db.update(model, id, data)
+  }
+
+  static delete (model, id) {
+    return this.constructor._db.delete(model, id) 
   }
 }
 
@@ -423,6 +435,63 @@ class LinesDb {
     
     // return instance of new Model
     return this.find(model, newId)
+  }
+
+  /**
+   * Update data in database
+   * @param  {string}   model   Model name
+   * @param  {Integer}  id      Model Id
+   * @param  {Object}   data    Key/value pairs of data to update
+   * @return {LinesDbModel}     Updated model
+   */
+  update (model, id, data) {
+    var obj = this.find(model, id)
+    if (obj === null)
+      throw new Error('Model ' + model + ' with Id ' + id + ' does not exist')
+    
+    let insertData = obj.data
+    
+    // Reference the Model schema
+    if (this._models[model] !== undefined) {
+      let schema = this._models[model].schema
+      // loop through data and ensure it matches Schema
+      for (let param in data) {
+        // 1. check it exists in schema
+        if (schema[param] === undefined) continue
+        
+        // 2. Check if param is required and empty
+        if (schema[param].required && (data[param] === '' || data[param] === null)) 
+          throw new Error('Parameter \'' + param + '\' is required for model ' + model)
+
+        // TODO: 3. add check for type
+        
+        // Add param and data
+        insertData[param] = data[param]
+      }
+    } else {
+      insertData = Object.assign(insertData, data)
+    }
+
+    // Update record
+    this._data[model][id] = Object.assign({}, insertData)
+
+    return this.find(model, id)
+  }
+
+  /**
+   * Delete line in database
+   * @param  {String}  model  Model name
+   * @param  {Integer} id     Model id
+   * @return {bool}           True only
+   */
+  delete (model, id) {
+    let obj = this.find(model, id)
+    if (obj === null)
+      throw new Error('Model ' + model + ' with Id ' + id + ' does not exist')
+
+    delete(this._data[model][id])
+
+    return true
   }
 
   /**
