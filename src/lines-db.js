@@ -228,6 +228,21 @@ class LinesDbModel {
     return LinesDbFacade.where(this.modelName, key, value, operator)
   }
 
+  static create (data) {
+    return LinesDbFacade.insert(this.modelName, data)
+  }
+
+  put () {
+    if (this.id === undefined) {
+      return LinesDbFacade.insert(this.modelName, this.data)
+    }
+    return LinesDbFacade.update(this.modelName, this.id, this.data)
+  }
+
+  remove () {
+    return LinesDbFacade.delete(this.modelName, this.id)
+  }
+
   /**
    * Override toString method
    * @return {String}
