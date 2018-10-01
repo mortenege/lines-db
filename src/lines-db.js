@@ -93,16 +93,40 @@ class LinesDbModel {
    * @return {Object} Well formatted schema
    */
   static createSchema () {
-    if (typeof this.schema !== 'function') throw new Error('Missing schema')
+    if (typeof this.schema !== 'object') throw new Error('Missing schema')
     if (this.name.match('Model$') === null) throw new Error('Model naming mismatch')
     
     // Get the Model Name
     let name = this.name.slice(0, -5)
     
+    // Create a standard/base schema
+    // TODO: Refactor to own class
+    let newSchema = {}
+    for (let param in this.schema) {
+      let declaration
+      if (typeof this.schema[param] === 'string') {
+        declaration = {
+          type: this.schema[param]
+        }
+      } else {
+        declaration = this.schema[param]
+      }
+
+      if (declaration.type === undefined) throw new Error('Missing \'type\' field for \'' + param + '\'')
+
+      let baseDeclaration = {
+        required: false,
+        default: LinesDb.schemaDefaultValue(declaration.type)
+      }
+
+      declaration = Object.assign(baseDeclaration, declaration)
+      newSchema[param] = declaration
+    }
+
     // Create a models object to store in the database
     let obj = {
       foreign_keys: {},
-      schema: this.schema(),
+      schema: newSchema,
       class: this
     }
 
@@ -141,15 +165,22 @@ class LinesDbModel {
   }
 
   /**
+   * Abstract method
+   */
+  static get schema () {
+    throw new Error('Abstract Method, and should not be called')
+  }
+
+  /**
    * Deep associate Models
    * @param  {string} name      Name of Model
    * @return {LinesDbModel}     This
    */
   with (name) {
     let key = name + 'Id'
-    if (!this._schema) throw new Error('No Schema declared for Model ' + this.className)
+    if (!this._schema) throw new Error('No Schema declared for Model ' + this.modelName)
     if (!this._schema.hasOwnProperty('foreign_keys') ||
-      this._schema.foreign_keys[key] === undefined) throw new Error('Model \'' + this.className + '\' does not have a FK ' + key)
+      this._schema.foreign_keys[key] === undefined) throw new Error('Model \'' + this.modelName + '\' does not have a FK ' + key)
 
     // get FK model
     let model = this._schema.foreign_keys[key]
@@ -263,7 +294,7 @@ class LinesDb {
     // Verify model is a proper class
     if (typeof model !== 'function') throw new Error('Type mismatch')
     if (!(model.prototype instanceof LinesDbModel)) throw new Error('Class mismatch')
-    if (typeof model.schema !== 'function') throw new Error('Missing schema')
+    if (typeof model.schema !== 'object') throw new Error('Missing schema')
     if (model.name.match('Model$') === null) throw new Error('Model naming mismatch')
     
     // Get the Model Name
@@ -285,13 +316,21 @@ class LinesDb {
   find (model, id) {
     if (!this._data.hasOwnProperty(model)) return null
     if (!this._data[model].hasOwnProperty(id)) return null
+    
     if (!this._models.hasOwnProperty(model)) {
       return new LinesDbModel(this, model, id, this._data[model][id])
     }
-
     return new this._models[model].class(this, model, id, this._data[model][id])
   }
 
+  /**
+   * Find models of this type
+   * $param  {String} model    Which model to search for
+   * @param  {String} key      Which Model attribute to search
+   * @param  {Mixed}  value    Value to compare with
+   * @param  {String} operator An operator for the operation
+   * @return {LinesDbCollection}          A filtered collection
+   */
   where (model, key, value, operator = '=') {
     if (!this._data.hasOwnProperty(model)) return null
     let arr = []
@@ -304,6 +343,86 @@ class LinesDb {
       }
     }
     return new LinesDbCollection(arr)
+  }
+
+  static schemaDefaultValue (declaration) {
+    let t
+    
+    // Check declaration
+    if (typeof declaration === 'string') {
+      t = declaration
+    } else if (typeof declaration === 'object') {
+      if (typeof declaration.type !== 'string') throw new Error('Type mismatch for \'type\'. Expected string, got ' + typeof declaration.type)
+      t = declaration.type        
+    } else {
+      throw new Error('Type mismatch for declaration. Expected string or object, got ' + typeof declaration)
+    }
+
+    t = t.toLowerCase()
+
+    switch (t) {
+      case 'string':
+        return ''
+      case 'integer':
+      case 'fk':
+        return 0
+      case 'float':
+        return 0.0
+      default:
+        return 0
+    }
+  }
+
+  /**
+   * Insert data into database
+   * @param  {string} model     Model to insert data for
+   * @param  {Object} data      Key/value pairs of data to insert
+   * @return {LinesDbModel}     Inserted model or null
+   */
+  insert (model, data) {
+    if (!this._data.hasOwnProperty(model)) {
+      this._data[model] = {}
+    }
+
+    if (data.id !== undefined) throw new Error('Model Id is immutable')
+
+    // get new Id
+    let ids = Object.keys(this._data[model])
+    let max = Math.max(...ids)
+    let newId = max + 1
+
+    // Create new data structure
+    let insertData = {model: model, id: newId}
+    
+    // Reference the Model schema
+    if (this._models[model] !== undefined) {
+      let schema = this._models[model].schema
+      // loop through schema and check each param  
+      for (let param in schema) {
+        
+        // 1. Check if param is required and not present
+        if (schema[param].required && data[param] === undefined) throw new Error('Parameter \'' + param + '\' is required for model ' + model)
+        
+        // 2. Check if param is present, otherwise add default value
+        if (data[param] === undefined) {
+          insertData[param] = schema[param].default
+          continue
+        }
+
+        // TODO: 3. add check for type
+        
+        // Add param and data
+        insertData[param] = data[param]
+      }
+    } else {
+      insertData = Object.assign(insertData, data)
+    }
+    
+    // insert data
+    this._data[model][newId] = insertData
+    
+    // return instance of new Model
+    return this.find(model, newId)
   }
 
   /**

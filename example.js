@@ -5,7 +5,7 @@ const { LinesDb, LinesDbModel } = require('./src/lines-db.js')
  * Model: Project
  */
 class ProjectModel extends LinesDbModel {
-  static schema () {
+  static get schema () {
     return {
       title: 'string',
     }
@@ -16,9 +16,9 @@ class ProjectModel extends LinesDbModel {
  * Model: TimeEvent
  */
 class TimeEventModel extends LinesDbModel {
-  static schema () {
+  static get schema () {
     return {
-      projectId: {type: 'fk', model: 'Project'},
+      projectId: {type: 'fk', model: 'Project', 'required': true},
       description: 'string',
     }
   }
@@ -65,4 +65,7 @@ coll.where('id', 7, '<=')
 // Perform find on collection (non-mutating operation)
 let o3 = coll.find(6)
 
-console.log(o3)
+// Create a new record
+var o4 = db.insert('Project', {title: 'you wish', other: 'non-schema param'})
+var o5 = db.insert('TimeEvent', {projectId: o4.id})
+console.log(o5.with('project'))

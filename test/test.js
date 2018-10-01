@@ -251,3 +251,19 @@ describe('LinesDb.addModel()', function () {
 
   });
 });
+
+describe('LinesDbModel.modelName', function () {
+  it('should get model base name', function () {
+    
+    // 1. ARRANGE
+    var expectedName = 'LinesDb'
+    var model = LinesDbModel
+
+    // 2. ACT
+    var name = model.modelName
+
+    // 3. ASSERT
+    expect(name).to.equal(expectedName)
+
+  });
+});
