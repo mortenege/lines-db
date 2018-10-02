@@ -14,7 +14,7 @@ var data = [
 ]
 
 class PersonModel extends LinesDbModel {
-  static schema () {
+  static get schema () {
     return {
       name: 'string',
       age: 'integer'
@@ -23,7 +23,7 @@ class PersonModel extends LinesDbModel {
 }
 
 class PetModel extends LinesDbModel {
-  static schema () {
+  static get schema () {
     return {
       ownerId: {type: 'fk', model: PersonModel.modelName},
       type: 'string',
@@ -264,6 +264,104 @@ describe('LinesDbModel.modelName', function () {
 
     // 3. ASSERT
     expect(name).to.equal(expectedName)
+
+  });
+});
+
+describe('LinesDbModel.find()', function () {
+  it('should find model of same type by Id', function () {
+    //1. ARRANGE
+    var model = PersonModel
+    var id = 2
+
+    // 2. ACT
+    var db = new LinesDb(data)
+    db.addModel(PersonModel)
+    db.addModel(PetModel)
+    var obj = model.find(id)
+
+    // 3. ASSERT
+    expect(obj).to.be.an.instanceof(LinesDbModel)
+    expect(obj).to.be.an.instanceof(model)
+    expect(obj.id).to.equal(id)
+  });
+});
+
+describe('LinesDbModel.where()', function () {
+  it('should filter the database by key value operation', function () {
+    
+    // 1. ARRANGE
+    var model = PetModel
+    var key = 'type'
+    var value = 'dog'
+    var operator = '='
+    var expectedResultsLength = 4
+
+    // 2. ACT
+    var db = new LinesDb(data);
+    db.addModel(PersonModel)
+    db.addModel(PetModel)
+    var collection = db.where(model.modelName, key, value, operator)
+
+    // 3. ASSERT
+    expect(collection).to.be.an.instanceof(LinesDbCollection)
+    expect(collection._arr).to.not.be.empty;
+    expect(collection._arr.length).to.equal(expectedResultsLength);
+    expect(collection._arr[0]).to.be.instanceOf(LinesDbModel)
+
+  });
+});
+
+describe('LinesDbModel.create()', function () {
+  it('should create a new line in db for this model', function () {
+    
+    // 1. ARRANGE
+    var model = PersonModel
+    var objData = {
+      name: 'Marc',
+      age: 10
+    }
+
+    // 2. ACT
+    var db = new LinesDb(data);
+    db.addModel(PersonModel)
+    db.addModel(PetModel)
+    var obj = model.create(objData)
+    var objDb = model.where('age', 10, '<=').first()
+
+    // 3. ASSERT
+    expect(obj).to.be.an.instanceof(LinesDbModel)
+    expect(obj).to.be.an.instanceof(model)
+    expect(objDb).to.be.an.instanceof(model)
+    expect(objDb.id).to.equal(obj.id)
+
+  });
+});
+
+describe('LinesDbModel.put()', function () {
+  it('should update a line in db for this model', function () {
+    
+    // 1. ARRANGE
+    var model = PersonModel
+    var id = 2
+    var objData = {
+      age: 17
+    }
+
+    // 2. ACT
+    var db = new LinesDb(data);
+    db.addModel(PersonModel)
+    db.addModel(PetModel)
+    var obj = model.find(id)
+    obj.setAge(16)
+    obj.put()
+    var newObj = model.find(id)
+
+    // 3. ASSERT
+    expect(obj).to.be.an.instanceof(LinesDbModel)
+    expect(obj).to.be.an.instanceof(model)
+    expect(obj.id).to.equal(newObj.id)
+    expect(obj.getAge()).to.equal(newObj.getAge())
 
   });
 });

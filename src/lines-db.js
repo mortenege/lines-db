@@ -1,3 +1,23 @@
+/****************************************************************
+
+ISC License
+
+Copyright (c) 2018, Morten Ege Jensen <ege.morten@gmail.com>
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+******************************************************************/
+
 /**
  * Global facade for dependency injection
  */
@@ -79,6 +99,15 @@ class LinesDbCollection {
     this._arr = arr.slice()
     return this
   }
+
+  /**
+   * Get the first element of a collection
+   * @return {LinesDbModel} The first element of Null
+   */
+  first () {
+    if (this._arr.length === 0) return null
+    return this._arr[0]
+  }
 }
 
 /**
@@ -94,10 +123,27 @@ class LinesDbModel {
    * @param  {Object} data    Data for model as with key:value pairs
    */
   constructor (db, model, id, data) {
-    this._db = db
-    this.id = id
-    this.model = model,
+    this._db = db || LinesDbFacade.db
+    this._model = model || this.modelName,
+    this._id = id || null
     this.data = Object.assign({}, data)
+
+    // Create getters and setters for all params in schema
+    // TODO: Add type checks and casting to types
+    for (let param in this.constructor.schema) {
+      let getterName = 'get' + param.charAt(0).toUpperCase() + param.slice(1);
+      let setterName = 'set' + param.charAt(0).toUpperCase() + param.slice(1);
+      this[getterName] = () => { return this.data[param] }
+      this[setterName] = (x) => { this.data[param] = x}
+    }
+  }
+
+  get id () {
+    return parseInt(this._id)
+  }
+
+  set id (x) {
+    throw new Error('Attribute Id is immutable')
   }
 
   /**
@@ -180,7 +226,7 @@ class LinesDbModel {
    * Abstract method
    */
   static get schema () {
-    throw new Error('Abstract Method, and should not be called')
+    return {}
   }
 
   /**
@@ -198,7 +244,7 @@ class LinesDbModel {
     let model = this._schema.foreign_keys[key]
     
     if (!this.data.hasOwnProperty(key)) {
-      throw new Error(this.model + " does not have a '" + model + "' ")
+      throw new Error(this.modelName + " does not have a '" + model + "' ")
     }
 
     let modelId = this.data[key]
@@ -233,10 +279,16 @@ class LinesDbModel {
   }
 
   put () {
-    if (this.id === undefined) {
-      return LinesDbFacade.insert(this.modelName, this.data)
+    let newObj
+    if (this.id === null) {
+      newObj = LinesDbFacade.insert(this.modelName, this.data)
+    } else {
+      newObj = LinesDbFacade.update(this.modelName, this.id, this.data)
     }
-    return LinesDbFacade.update(this.modelName, this.id, this.data)
+
+    this.data = Object.assign({}, newObj.data)
+    this._id = newObj.id
+    return this
   }
 
   remove () {
@@ -415,7 +467,7 @@ class LinesDb {
 
     // get new Id
     let ids = Object.keys(this._data[model])
-    let max = Math.max(...ids)
+    let max = ids.length === 0 ? 0 : Math.max(...ids)
     let newId = max + 1
 
     // Create new data structure
